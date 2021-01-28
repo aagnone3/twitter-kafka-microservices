@@ -10,6 +10,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Component;
@@ -21,21 +22,22 @@ import lombok.extern.slf4j.Slf4j;
 @Component("kafkaDataProducer")
 public class KafkaDataProducer implements IDataProducer {
 
+	@Value("${topic.name}")
+    private String topicName;
+    
 	@Autowired
-	private KafkaTemplate<Long, String> kafkaTemplate;
+	private KafkaTemplate<Long, SourceData> kafkaTemplate;
 
 	@Autowired
 	ObjectMapper objectMapper;
 
-	private static final String TOPIC = "some-data";
-
 	public Object send(SourceData data) throws JsonProcessingException {
 		// build the record to send
 		Long key = data.getId();
-		ProducerRecord<Long, String> record = buildRecord(data);
+		ProducerRecord<Long, SourceData> record = buildRecord(data);
 
 		// send the record and handle futures
-		ListenableFuture<SendResult<Long, String>> listenableFuture = kafkaTemplate.send(record);
+		ListenableFuture<SendResult<Long, SourceData>> listenableFuture = kafkaTemplate.send(record);
 		listenableFuture.addCallback(
 			this::handleSendSuccess,
 			exception -> handleSendFailure(key, exception)
@@ -43,12 +45,12 @@ public class KafkaDataProducer implements IDataProducer {
 		return null;
 	}
 
-	private ProducerRecord<Long, String> buildRecord(SourceData data) throws JsonProcessingException {
+	private ProducerRecord<Long, SourceData> buildRecord(SourceData data) throws JsonProcessingException {
 		List<Header> recordHeaders = List.of(new RecordHeader("event-source", "some-data-producer".getBytes()));
-		return new ProducerRecord<>(TOPIC, null, data.getId(), objectMapper.writeValueAsString(data), recordHeaders);
+		return new ProducerRecord<Long, SourceData>(topicName, null, data.getId(), data, recordHeaders);
 	}
 
-	public void handleSendSuccess(SendResult<Long, String> sendResult) {
+	public void handleSendSuccess(SendResult<Long, SourceData> sendResult) {
 		Long keySent = sendResult.getProducerRecord().key();
 		log.info("Send successful {}", keySent);
 	}
